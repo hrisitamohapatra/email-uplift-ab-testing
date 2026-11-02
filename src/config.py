@@ -21,10 +21,30 @@ POWER = 0.80
 N_BOOTSTRAP = 2_000
 TEST_SIZE = 0.30
 
+# Uplift models: small, slow-learning trees because positive cases are rare. Not tuned.
+LGBM_PARAMS = {
+    "n_estimators": 200,
+    "learning_rate": 0.03,
+    "num_leaves": 7,
+    "min_child_samples": 100,
+    "subsample": 0.8,
+    "subsample_freq": 1,
+    "colsample_bytree": 0.8,
+    "n_jobs": 1,
+    "verbose": -1,
+}
+UPLIFT_TOP_FRACTIONS = (0.1, 0.2, 0.3, 0.5)
+
 # ASSUMPTIONS, not measurements: neither dataset contains costs or margins.
 # Every money figure in this project depends on these two numbers.
 ASSUMED_COST_PER_CONTACT_USD = 0.10
 ASSUMED_MARGIN_PER_CONVERSION_USD = 30.00
+
+# ROI grids. The sensitivity ranges are also assumptions; the base case is the pair above.
+ROI_FRACTIONS = tuple(step / 100 for step in range(5, 101, 5))
+ROI_COST_GRID_USD = (0.05, 0.10, 0.25, 0.50)
+ROI_MARGIN_GRID_USD = (15.00, 30.00, 60.00)
+ROI_FOLDS = 5
 
 # Hillstrom columns
 HILLSTROM_ROWS = 64_000
@@ -48,6 +68,7 @@ HILLSTROM_FEATURES = (
     "newbie",
     "channel",
 )
+HILLSTROM_MODEL_FEATURES = tuple(f for f in HILLSTROM_FEATURES if f != "history_segment")
 HILLSTROM_OUTCOMES = ("visit", "conversion", "spend")
 
 # Criteo columns
