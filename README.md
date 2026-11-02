@@ -105,6 +105,6 @@ Download the datasets once. Hillstrom is about 0.4 MB and Lenta about 145 MB, an
 ## Data sources
 
 - **Hillstrom:** [MineThatData E-Mail Analytics and Data Mining Challenge](https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html), by Kevin Hillstrom.
-- **Lenta:** BigTarget Hackathon, hosted by Lenta and Microsoft in 2020, loaded through [`scikit-uplift`](https://github.com/maks-sh/scikit-uplift).
+- **Lenta:** BigTarget Hackathon, hosted by Lenta and Microsoft in 2020, loaded through [`scikit-uplift`](https://github.com/maks-sh/scikit-uplift). License: Not explicitly specified / Unknown.
 
-The data is not stored in this repository.
+The data is not stored in this repository. This project was done for educational purposes with no intent of commercializing.
