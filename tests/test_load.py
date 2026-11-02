@@ -88,6 +88,70 @@ def test_broken_hillstrom_is_rejected(break_table, message):
         load.validate_hillstrom(break_table(make_hillstrom()))
 
 
+def make_lenta(rows=2_000):
+    treated_rows = int(rows * config.LENTA_TREATMENT_SHARE)
+    positives = int(rows * config.LENTA_OUTCOME_RATE)
+    df = pd.DataFrame({f"feature_{i}": 0.5 for i in range(3)}, index=range(rows))
+    df[config.LENTA_GROUP_COL] = [config.LENTA_TREATED] * treated_rows + [config.LENTA_CONTROL] * (rows - treated_rows)
+    df[config.LENTA_OUTCOME] = [1] * positives + [0] * (rows - positives)
+    return df
+
+
+@pytest.fixture
+def small_lenta(monkeypatch):
+    monkeypatch.setattr(config, "LENTA_ROWS", 2_000)
+    monkeypatch.setattr(config, "LENTA_FEATURE_COLUMNS", 3)
+
+
+def test_valid_lenta_passes_even_with_missing_features(small_lenta):
+    load.validate_lenta(make_lenta().assign(feature_0=np.nan))
+
+
+@pytest.mark.parametrize(
+    "break_table, message",
+    [
+        (lambda df: df.iloc[:-1], "rows"),
+        (lambda df: df.drop(columns="feature_0"), "feature columns"),
+        (lambda df: df.assign(group="other"), "groups"),
+        (lambda df: df.assign(response_att=np.nan), "Missing"),
+        (lambda df: df.assign(group=df["group"].where(df.index > 5)), "Missing"),
+        (lambda df: df.assign(response_att=2), "response_att"),
+        (lambda df: df.assign(group=["test"] * 1_000 + ["control"] * 1_000), "treatment share"),
+        (lambda df: df.assign(response_att=[1] * 1_000 + [0] * 1_000), "outcome rate"),
+    ],
+)
+def test_broken_lenta_is_rejected(small_lenta, break_table, message):
+    with pytest.raises(ValueError, match=message):
+        load.validate_lenta(break_table(make_lenta()))
+
+
+def test_load_lenta_does_not_download_and_builds_treatment(monkeypatch, tmp_path, small_lenta):
+    calls = []
+
+    def fetch(**kwargs):
+        calls.append(kwargs)
+        df = make_lenta()
+        features = df.drop(columns=[config.LENTA_GROUP_COL, config.LENTA_OUTCOME])
+        return features, df[config.LENTA_OUTCOME], df[config.LENTA_GROUP_COL]
+
+    monkeypatch.setattr(load, "fetch_lenta", fetch)
+    df = load.load_lenta(data_dir=tmp_path)
+    assert calls[0]["download_if_missing"] is False
+    assert calls[0]["data_home"] == str(tmp_path)
+    assert config.LENTA_GROUP_COL not in df.columns
+    assert df[config.LENTA_TREATMENT_COL].mean() == pytest.approx(config.LENTA_TREATMENT_SHARE)
+
+
+@pytest.mark.skipif(
+    not (config.DATA_DIR / "lenta_dataset.csv.gz").exists(),
+    reason="Lenta file not downloaded",
+)
+def test_real_lenta_file_passes_validation():
+    df = load.load_lenta()
+    assert len(df) == config.LENTA_ROWS
+    assert config.LENTA_TREATMENT_COL in df.columns
+
+
 def test_valid_criteo_passes():
     load.validate_criteo(make_criteo(), CRITEO_TEST_ROWS)
 
@@ -148,7 +212,7 @@ def test_load_criteo_can_sample(monkeypatch, tmp_path, small_criteo_10pct):
     assert len(df) == 1_000
 
 
-@pytest.mark.parametrize("loader", [load.load_hillstrom, load.load_criteo])
+@pytest.mark.parametrize("loader", [load.load_hillstrom, load.load_lenta, load.load_criteo])
 def test_missing_file_raises_instead_of_downloading(loader, tmp_path):
     with pytest.raises(OSError, match="Dataset missing"):
         loader(data_dir=tmp_path)

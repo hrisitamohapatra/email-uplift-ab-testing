@@ -45,6 +45,34 @@ These were recorded before the analysis was run on the real data.
 
 **Limitation:** Criteo measures advertising, not email. It can test whether the method works at scale, but its results say nothing direct about email customers.
 
+## Lenta replaces Criteo (changed 2026-11-02)
+
+**What changed:** Lenta is now the second dataset. Criteo was not analysed.
+
+**Why:** on 2026-11-02, both download links in `scikit-uplift` and the link on Criteo's own dataset page returned 404 to header requests. Lenta was chosen over X5 (needs features built from 45.8M purchase rows) and MegaFon (synthetic data). The `load_criteo` code remains in `src/load.py`, but it has only ever been run on fake data.
+
+These choices were recorded before any model was fitted on Lenta.
+
+| Decision | Choice | Reason |
+|---|---|---|
+| Role | Second test, kept separate from Hillstrom | Tests whether the methods do better with many more positive cases. Different customers, features and outcomes mean the data cannot be combined, and more data cannot be proven as the cause of any difference. |
+| Treatment | `group`: `test` vs `control` | The assigned group. |
+| Outcome | `response_att`, a store visit | Lenta has no purchase outcome, so the $30 margin does not really apply and Lenta money figures are illustrative only. Hillstrom remains the source of the main money figures. |
+| Excluded by choice | `age`, `gender` | Personal attributes are left out of targeting by default. |
+| Post-treatment check | Compare each feature and its missingness between groups, and exclude anything above 0.1 standardized difference | The docs do not state the timing of every feature. In a randomized test, a pre-treatment feature should look the same in both groups. This cannot prove a feature is pre-treatment, because a post-treatment feature that the campaign did not move would pass too. |
+| Missing values | Left as they are | LightGBM handles missing values natively, and 153 columns have some. |
+| Hold-out | 30%, stratified by group and outcome | Same approach as Hillstrom. |
+| Stability | 5 other seeds, holding each model's chosen share fixed | Choosing the share again would take too long at this size, so this measures less than the Hillstrom check. |
+
+**Licence:** the `scikit-uplift` docs state none for this data, so it stays out of git and the source is credited.
+
+**Findings from the checks, before any model was fitted:**
+- `response_sms` (share of past SMS messages responded to) failed the check at 0.198 and is excluded under the rule.
+- `response_viber` passed at 0.068 but is the same kind of measure and the next largest difference, so it is also excluded. This is a judgement call beyond the written rule.
+- `gender` differs by 0.026, about 9 times what chance alone would give at this sample size, and a campaign cannot change gender. Assignment may therefore not be purely random.
+
+**Added because of that last finding:** predict assignment from the kept features on unseen rows, and compare the raw lift with a lift calculated within 5 groups of customers who had a similar predicted chance of treatment. An AUC near 0.5 would mean assignment looks random. This can only adjust for what the features measure.
+
 ## Pre-treatment features vs outcomes
 
 Only pre-treatment columns may be model inputs. A column measured after the email could itself be affected by the email, and using it would leak the answer into the model.
@@ -111,6 +139,37 @@ These were recorded before any profit figure was computed on the real data. The 
 | Reporting | Hold-out profit at the chosen k, with 2,000 bootstrap resamples and a paired gain against emailing everyone | The gain answers the real question: does targeting beat the simple alternative? |
 | Stability | Repeat with 10 other seeds | Covers the training randomness the intervals leave out. |
 | Cost sensitivity | Cost per contact of $0.05, $0.10, $0.25 and $0.50; margin per conversion of $15, $30 and $60 | Shows how far the recommendation depends on assumptions the data cannot check. The base case stays $0.10 and $30. |
+
+## Memo method (Stage 5)
+
+These were recorded before the fixed-budget figures were calculated.
+
+| Decision | Choice | Reason |
+|---|---|---|
+| Question | Which 10,000 to email and which 10,000 to leave out | Set by the brief, as 10,000 of 64,000 customers (15.625%). Because the share is fixed in advance, it avoids choosing the best-looking share. |
+| Email | Men's email vs no email | It had the larger average effect in Stage 2. |
+| Main ranking | T-learner trained on conversion | It directly addresses who would have bought anyway, and it is the simpler uplift model to explain. |
+| Compared with | Response model, and a random 10,000 | The random comparison uses the lift across all hold-out customers. The memo must say so if the T-learner does not win. |
+| Evidence | Hold-out with 2,000 paired bootstrap resamples, plus 10 other seeds | Same approach as Stage 4. |
+| Leave-out group | The lowest-ranked 15.625%, with the lift measured in that group | Shows whether leaving them out gives up real conversions. |
+| Profile | Average features of the top and bottom groups on the hold-out | Gives a usable description. Hillstrom has no customer IDs, so the memo gives a rule rather than a list of names. |
+
+## Improvements tried after the main results (exploratory)
+
+These were recorded before the improvements were run. They came after the main results were known, so they are exploratory: they cannot replace the headline, and the recorded results stay unchanged.
+
+| Decision | Choice | Reason |
+|---|---|---|
+| New splits | Split seeds 101 to 110, none used before | Less tied to the runs already seen, though they reuse the same customers, so this is not truly fresh data. |
+| Seed averaging | Average 5 model seeds; compare with the first of those seeds alone on the same split | Tests whether averaging reduces instability without changing the training data. |
+| Seed-averaging measures | Qini area and uplift in the top 15.625%, on conversion | The main ranking measure and the memo's fixed budget. |
+| Best email per customer | Use averaged T-learner scores for each email and choose the higher | Answers which email each person should get. |
+| Policies compared | No one, men's to everyone, women's to everyone, best email to everyone, best email only if predicted profitable, and best email vs men's only for the top 15.625% | Each policy is set from training data and the assumed costs, with no choice made on the hold-out. |
+| Scoring a policy | Among hold-out customers whose random arm matches the policy's choice, weight each arm's conversion rate by the share assigned to it | Random assignment means those matching customers fairly represent everyone assigned to that arm. |
+| Intervals | 2,000 paired bootstrap resamples on split 101, plus averages across all 10 splits | Split 101 was chosen in advance so that no split is picked for looking good. |
+| Benchmarks | Men's to everyone; for the fixed budget, men's only to the top 15.625% | An improvement should beat the current recommendation. |
+
+**Memo corrected as a result (2026-11-02):** the T-learner's top group averaged 5.9 added conversions per 1,000 across the new splits, against 6.7 for a random group, compared with 12.5 in the first run. The memo now says to budget as if the 10,000 were random. It also drops its claim that a small test would settle targeting: detecting an extra 5 per 1,000 needs about 51,000 customers across four groups. The earlier figures are unchanged and still reported.
 
 ## Environment
 

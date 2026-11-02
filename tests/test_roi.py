@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from sklearn.model_selection import train_test_split
 
-from src import config, evaluate, roi, simulate
+from src import config, evaluate, learners, roi, simulate
 
 COLUMNS = list(simulate.FEATURES)
 
@@ -117,6 +117,82 @@ def test_out_of_fold_scores_fill_every_row_and_differ_from_in_sample():
     for name in roi.MODELS:
         assert np.isfinite(oof[name]).all()
         assert not np.allclose(oof[name], in_sample[name])
+
+
+def make_lenta_like(n=4_000, seed=1):
+    df = simulate.simulate_uplift(n, seed, treatment_share=0.75)
+    table = df[COLUMNS].assign(
+        **{config.LENTA_OUTCOME: df["outcome"], config.LENTA_TREATMENT_COL: df["treatment"], "age": 40.0, "gender": "x"},
+        response_sms=0.5,
+        response_viber=0.5,
+    )
+    return table
+
+
+def test_lenta_features_leave_out_outcome_treatment_and_excluded_columns():
+    columns = learners.lenta_features(make_lenta_like()).columns
+    assert list(columns) == COLUMNS
+
+
+def test_learners_refuse_excluded_lenta_columns():
+    df = make_lenta_like()
+    X = df[COLUMNS + ["response_sms"]]
+    with pytest.raises(ValueError, match="cannot be model inputs"):
+        learners.TLearner().fit(X, df[config.LENTA_OUTCOME], df[config.LENTA_TREATMENT_COL])
+
+
+def test_run_lenta_roi_uses_primary_models_only():
+    result = roi.run_lenta_roi(make_lenta_like(), n_boot=10)
+    assert set(result["chosen"]) == {"response", "t_learner", "x_learner"}
+    assert set(result["metrics"]["model"]) == {"response", "t_learner", "x_learner"}
+
+
+def test_lenta_stability_holds_the_chosen_share_fixed():
+    chosen = {"response": 0.5, "t_learner": 0.5, "x_learner": 1.0}
+    table = roi.lenta_stability(make_lenta_like(), chosen, seeds=[1, 2])
+    assert len(table) == 2 * 3
+    assert (table.loc[table["model"] == "x_learner", "gain_vs_everyone"].abs() < 1e-9).all()
+
+
+def test_fixed_budget_finds_more_lift_at_the_top_of_a_true_ranking():
+    df = simulate.simulate_uplift(40_000, seed=3)
+    table = roi.fixed_budget_table(df["outcome"], df["treatment"], {"true": df["true_effect"]}, 0.15, n_boot=100).set_index("group")
+    assert table.loc["top true", "added_per_1000_contacts"] > table.loc["random", "added_per_1000_contacts"]
+    assert table.loc["bottom true", "added_per_1000_contacts"] < table.loc["random", "added_per_1000_contacts"]
+    assert table.loc["top true", "gain_low"] > 0
+    assert table.loc["random", "gain_low"] == table.loc["random", "gain_high"] == 0
+
+
+def test_fixed_budget_profit_matches_hand_calculation():
+    # Every treated customer converts and no control customer does, so uplift is 1.
+    y, t = np.array([1, 0] * 100), np.array([1, 0] * 100)
+    table = roi.fixed_budget_table(y, t, {"m": np.arange(200.0)}, 0.5, n_boot=10, budget=10_000).set_index("group")
+    # 10,000 * (1 * 30 - 0.10) = 299,000
+    assert table.loc["top m", "profit_for_budget"] == pytest.approx(299_000)
+
+
+def test_same_ranking_gives_zero_gap_between_models():
+    rng = np.random.default_rng(5)
+    y, t, score = rng.integers(0, 2, 1_000), rng.integers(0, 2, 1_000), rng.normal(size=1_000)
+    result = roi.t_learner_vs_response(y, t, {"t_learner": score, "response": score}, 0.2, n_boot=50)
+    assert result == {"difference": 0, "low": 0, "high": 0}
+
+
+def test_group_profile_separates_top_and_bottom():
+    features = pd.DataFrame({"a": np.arange(100.0)})
+    profile = roi.group_profile(features, features["a"], 0.1)
+    assert profile.loc["a", "top_group"] == pytest.approx(94.5)
+    assert profile.loc["a", "bottom_group"] == pytest.approx(4.5)
+    assert profile.loc["a", "all_customers"] == pytest.approx(49.5)
+
+
+def test_full_sample_profit_uses_the_assumed_formula():
+    arms = [config.HILLSTROM_MENS] * 1_000 + [config.HILLSTROM_WOMENS] * 1_000 + [config.HILLSTROM_CONTROL] * 1_000
+    conversion = [1] * 20 + [0] * 980 + [1] * 10 + [0] * 990 + [1] * 5 + [0] * 995
+    table = roi.full_sample_profit(pd.DataFrame({config.HILLSTROM_ARM_COL: arms, "conversion": conversion}), cost=0.10, margin=30)
+    # Lift of 0.015: 1000 * (0.015 * 30 - 0.10) = 350
+    assert table.iloc[0]["profit"] == pytest.approx(350)
+    assert table.iloc[0]["profit_low"] < 350 < table.iloc[0]["profit_high"]
 
 
 def test_visit_trained_models_are_labelled_exploratory():

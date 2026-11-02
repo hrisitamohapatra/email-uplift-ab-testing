@@ -230,6 +230,58 @@ def test_bootstrap_is_repeatable_with_a_seed():
     assert first == second
 
 
+# Plain-English reading
+
+
+def test_reading_describes_a_significant_increase():
+    text = experiment.plain_english_reading(experiment.two_proportion_test(600, 5_000, 500, 5_000))
+    assert "12.00%" in text and "10.00%" in text
+    assert "2.00 percentage points higher" in text
+    assert "statistically significant (p" in text
+    assert "not statistically significant" not in text
+
+
+def test_reading_does_not_claim_no_effect_when_not_significant():
+    text = experiment.plain_english_reading(experiment.two_proportion_test(49, 1_000, 50, 1_000))
+    assert "lower" in text
+    assert "not statistically significant" in text
+    assert "does not prove" in text
+
+
+def test_reading_uses_the_chosen_confidence_level():
+    result = experiment.two_proportion_test(600, 5_000, 500, 5_000, alpha=0.10)
+    assert "90% confidence interval" in experiment.plain_english_reading(result, alpha=0.10)
+
+
+# Assignment check
+
+
+def test_assignment_check_finds_random_assignment_looks_random():
+    rng = np.random.default_rng(16)
+    n = 30_000
+    features = pd.DataFrame({"a": rng.normal(size=n), "b": rng.normal(size=n)})
+    treatment = (rng.random(n) < 0.75).astype(int)
+    outcome = (rng.random(n) < 0.10 + 0.02 * treatment).astype(int)
+    result = experiment.assignment_check(features, treatment, outcome)
+    assert result["auc"] == pytest.approx(0.5, abs=0.03)
+    assert result["adjusted_low"] < 0.02 < result["adjusted_high"]
+
+
+def test_assignment_check_detects_and_reduces_confounding():
+    """Treatment goes to likely buyers, so the raw lift is biased upward. The true effect is 0.02."""
+    rng = np.random.default_rng(17)
+    n = 60_000
+    confounder = rng.normal(size=n)
+    features = pd.DataFrame({"a": confounder, "b": rng.normal(size=n)})
+    treatment = (rng.random(n) < 1 / (1 + np.exp(-1.5 * confounder))).astype(int)
+    baseline = np.clip(0.10 + 0.08 * confounder, 0.01, 0.9)
+    outcome = (rng.random(n) < baseline + 0.02 * treatment).astype(int)
+    result = experiment.assignment_check(features, treatment, outcome)
+    assert result["auc"] > 0.7
+    assert result["raw_low"] > 0.02
+    assert abs(result["adjusted_lift"] - 0.02) < abs(result["raw_lift"] - 0.02)
+
+
 # Power and minimum detectable effect
 
 

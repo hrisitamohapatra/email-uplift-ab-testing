@@ -1,14 +1,19 @@
 """Experiment analysis for Hillstrom: checks, lift, multiple testing, adjustment and power.
 
 Run the full analysis with: python -m src.experiment
+Run the Lenta checks with: python -m src.experiment lenta
 """
+
+import sys
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from scipy import optimize, stats
+from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
 
-from src import config, load
+from src import config, learners, load
 
 
 def sample_ratio_check(counts, expected_shares=None):
@@ -260,9 +265,105 @@ def run_hillstrom(df, seed=config.SEED):
     }
 
 
+def plain_english_reading(result, alpha=config.ALPHA):
+    """Turn a two_proportion_test result into a short reading. A and B are the two groups."""
+    points = result["difference"] * 100
+    low, high = result["ci_low"] * 100, result["ci_high"] * 100
+    confidence = round((1 - alpha) * 100)
+    direction = "higher" if points > 0 else "lower"
+    summary = (
+        f"Group A converted at {result['mean_a']:.2%} and group B at {result['mean_b']:.2%}. "
+        f"A is {abs(points):.2f} percentage points {direction} than B "
+        f"({confidence}% confidence interval: {low:+.2f} to {high:+.2f} points). "
+    )
+    if result["p_value"] < alpha:
+        verdict = (
+            f"This is statistically significant (p = {result['p_value']:.4f}), so a difference "
+            "this large is unlikely if the groups truly perform the same. "
+            "Check that the likely size of the effect is worth acting on."
+        )
+    else:
+        verdict = (
+            f"This is not statistically significant (p = {result['p_value']:.4f}). That does not prove "
+            "the groups are the same: the true difference could be anywhere in the interval."
+        )
+    return summary + verdict + " This reading assumes customers were randomly assigned and the sample size was set in advance."
+
+
+def assignment_check(features, treatment, outcome, n_groups=5, alpha=config.ALPHA, seed=config.SEED):
+    """Can the features predict who was treated? If so, compare lift among similar customers.
+
+    AUC near 0.5 means assignment looks random. The adjusted lift compares treated and
+    control customers within groups who had a similar predicted chance of treatment, then
+    averages by group size. It can only correct for differences the features measure.
+    """
+    treatment, outcome = np.asarray(treatment), np.asarray(outcome)
+    rows = np.arange(len(treatment))
+    fit_rows, check_rows = train_test_split(rows, test_size=config.TEST_SIZE, random_state=seed, stratify=treatment)
+    model = learners.make_classifier(seed).fit(features.iloc[fit_rows], treatment[fit_rows])
+    chance = model.predict_proba(features.iloc[check_rows])[:, 1]
+    t_check, y_check = treatment[check_rows], outcome[check_rows].astype(float)
+
+    groups = pd.qcut(chance, n_groups, labels=False, duplicates="drop")
+    estimate, variance = 0.0, 0.0
+    for group in np.unique(groups):
+        in_group = groups == group
+        treated = y_check[in_group & (t_check == 1)]
+        control = y_check[in_group & (t_check == 0)]
+        weight = in_group.mean()
+        estimate += weight * (treated.mean() - control.mean())
+        variance += weight**2 * (treated.var(ddof=1) / len(treated) + control.var(ddof=1) / len(control))
+    margin = stats.norm.ppf(1 - alpha / 2) * np.sqrt(variance)
+    raw = two_proportion_test(y_check[t_check == 1].sum(), (t_check == 1).sum(), y_check[t_check == 0].sum(), (t_check == 0).sum(), alpha)
+    return {
+        "auc": roc_auc_score(t_check, chance),
+        "raw_lift": raw["difference"],
+        "raw_low": raw["ci_low"],
+        "raw_high": raw["ci_high"],
+        "adjusted_lift": estimate,
+        "adjusted_low": estimate - margin,
+        "adjusted_high": estimate + margin,
+    }
+
+
+def lenta_checks(df):
+    """Check the Lenta experiment before modelling, including features that may be post-treatment.
+
+    Pre-treatment features should look alike in both randomized groups, and so should
+    their missing values. A large gap suggests the campaign itself moved the feature.
+    """
+    treatment, outcome = config.LENTA_TREATMENT_COL, config.LENTA_OUTCOME
+    features = [column for column in df.columns if column not in (treatment, outcome)]
+    missing_flags = df[features].isna().astype(float).add_suffix("__missing")
+    missing_flags = missing_flags.loc[:, missing_flags.mean() > 0]
+    expanded = pd.concat([df[features], missing_flags, df[[treatment]]], axis=1)
+    balance = covariate_balance(expanded, [*features, *missing_flags.columns], treatment, [1, 0])
+    treated, control = df[df[treatment] == 1][outcome], df[df[treatment] == 0][outcome]
+    return {
+        "counts": {"treated": len(treated), "control": len(control)},
+        "sample_ratio": sample_ratio_check(
+            [len(treated), len(control)], [config.LENTA_TREATMENT_SHARE, 1 - config.LENTA_TREATMENT_SHARE]
+        ),
+        "lift": two_proportion_test(treated.sum(), len(treated), control.sum(), len(control)),
+        "power_mde": mde_proportion(control.mean(), min(len(treated), len(control))),
+        "balance": balance.sort_values("max_abs_smd", ascending=False),
+    }
+
+
 if __name__ == "__main__":
     pd.set_option("display.width", 220, "display.max_columns", 30, "display.max_rows", 100)
     pd.set_option("display.float_format", lambda value: f"{value:.5f}")
+    if "lenta" in sys.argv:
+        checks = lenta_checks(load.load_lenta())
+        print("COUNTS", checks["counts"])
+        print("SAMPLE RATIO CHECK", checks["sample_ratio"])
+        print("LIFT", checks["lift"])
+        print("SMALLEST DETECTABLE LIFT (conservative, smaller arm size)", checks["power_mde"])
+        print("FEATURES ABOVE SMD LIMIT:", (checks["balance"]["max_abs_smd"] > config.LENTA_SMD_LIMIT).sum())
+        print("LARGEST 15 DIFFERENCES\n", checks["balance"].head(15).to_string(index=False))
+        lenta = load.load_lenta()
+        print("ASSIGNMENT CHECK", assignment_check(learners.lenta_features(lenta), lenta[config.LENTA_TREATMENT_COL], lenta[config.LENTA_OUTCOME]))
+        sys.exit()
     results = run_hillstrom(load.load_hillstrom())
     print("ARM COUNTS\n", results["arm_counts"].to_string(), "\n")
     print("SAMPLE RATIO CHECK\n", results["sample_ratio"], "\n")

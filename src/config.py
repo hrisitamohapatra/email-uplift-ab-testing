@@ -45,6 +45,7 @@ ROI_FRACTIONS = tuple(step / 100 for step in range(5, 101, 5))
 ROI_COST_GRID_USD = (0.05, 0.10, 0.25, 0.50)
 ROI_MARGIN_GRID_USD = (15.00, 30.00, 60.00)
 ROI_FOLDS = 5
+MEMO_BUDGET = 10_000
 
 # Hillstrom columns
 HILLSTROM_ROWS = 64_000
@@ -70,6 +71,22 @@ HILLSTROM_FEATURES = (
 )
 HILLSTROM_MODEL_FEATURES = tuple(f for f in HILLSTROM_FEATURES if f != "history_segment")
 HILLSTROM_OUTCOMES = ("visit", "conversion", "spend")
+
+# Lenta columns
+LENTA_ROWS = 687_029
+LENTA_FEATURE_COLUMNS = 193
+LENTA_GROUP_COL = "group"
+LENTA_TREATED = "test"
+LENTA_CONTROL = "control"
+LENTA_TREATMENT_COL = "treatment"
+LENTA_OUTCOME = "response_att"
+LENTA_TREATMENT_SHARE = 0.75
+LENTA_TREATMENT_SHARE_TOLERANCE = 0.01
+LENTA_OUTCOME_RATE = 0.10
+LENTA_OUTCOME_RATE_TOLERANCE = 0.02
+LENTA_SMD_LIMIT = 0.10
+# Personal attributes are left out by choice. Features failing the balance check are added here.
+LENTA_EXCLUDED_FEATURES = ("age", "gender", "response_sms", "response_viber")
 
 # Criteo columns
 CRITEO_ROWS_FULL = 13_979_592

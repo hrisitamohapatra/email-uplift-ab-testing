@@ -1,0 +1,6 @@
+# Keeps Streamlit from sending usage statistics or asking for an email on first run.
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true

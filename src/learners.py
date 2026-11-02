@@ -16,6 +16,9 @@ FORBIDDEN_FEATURES = {
     config.HILLSTROM_ARM_COL,
     config.CRITEO_TREATMENT_COL,
     "exposure",
+    config.LENTA_OUTCOME,
+    config.LENTA_GROUP_COL,
+    *config.LENTA_EXCLUDED_FEATURES,
 }
 
 
@@ -118,6 +121,19 @@ def hillstrom_features(df):
 def split_hillstrom(df, test_size=config.TEST_SIZE, seed=config.SEED):
     """Split once, so that all models share the same untouched hold-out customers."""
     strata = df[config.HILLSTROM_ARM_COL].astype(str) + "_" + df["conversion"].astype(str)
+    return train_test_split(df, test_size=test_size, random_state=seed, stratify=strata)
+
+
+def lenta_features(df):
+    """Every Lenta column except the outcome, treatment and the columns excluded in config."""
+    dropped = [config.LENTA_OUTCOME, config.LENTA_TREATMENT_COL, *config.LENTA_EXCLUDED_FEATURES]
+    features = df.drop(columns=dropped)
+    check_features(features)
+    return features
+
+
+def split_lenta(df, test_size=config.TEST_SIZE, seed=config.SEED):
+    strata = df[config.LENTA_TREATMENT_COL].astype(str) + "_" + df[config.LENTA_OUTCOME].astype(str)
     return train_test_split(df, test_size=test_size, random_state=seed, stratify=strata)
 
 
