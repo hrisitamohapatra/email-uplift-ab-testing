@@ -35,7 +35,7 @@ def make_hillstrom(n=6_000, seed=1):
     )
 
 
-@pytest.mark.parametrize("name", ["visit", "conversion", "spend", "segment", "treatment", "exposure"])
+@pytest.mark.parametrize("name", ["visit", "conversion", "spend", "segment", "treatment", "group", "response_att"])
 @pytest.mark.parametrize("learner", [learners.ResponseModel, learners.TLearner, learners.XLearner])
 def test_learners_refuse_outcomes_and_treatment_as_inputs(data, learner, name):
     train, _ = data

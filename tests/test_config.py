@@ -8,13 +8,10 @@ def test_data_and_cache_stay_inside_project():
 
 def test_outcomes_are_never_listed_as_features():
     assert not set(config.HILLSTROM_FEATURES) & set(config.HILLSTROM_OUTCOMES)
-    assert not set(config.CRITEO_FEATURES) & set(config.CRITEO_OUTCOMES)
 
 
 def test_treatment_columns_are_never_listed_as_features():
     assert config.HILLSTROM_ARM_COL not in config.HILLSTROM_FEATURES
-    assert config.CRITEO_TREATMENT_COL not in config.CRITEO_FEATURES
-    assert "exposure" not in config.CRITEO_FEATURES
 
 
 def test_comparisons_are_the_three_pairs_of_arms():

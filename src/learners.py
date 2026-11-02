@@ -12,12 +12,10 @@ from src import config, evaluate, load, simulate
 
 FORBIDDEN_FEATURES = {
     *config.HILLSTROM_OUTCOMES,
-    *config.CRITEO_OUTCOMES,
     config.HILLSTROM_ARM_COL,
-    config.CRITEO_TREATMENT_COL,
-    "exposure",
     config.LENTA_OUTCOME,
     config.LENTA_GROUP_COL,
+    config.LENTA_TREATMENT_COL,
     *config.LENTA_EXCLUDED_FEATURES,
 }
 

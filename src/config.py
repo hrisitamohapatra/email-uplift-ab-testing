@@ -87,13 +87,3 @@ LENTA_OUTCOME_RATE_TOLERANCE = 0.02
 LENTA_SMD_LIMIT = 0.10
 # Personal attributes are left out by choice. Features failing the balance check are added here.
 LENTA_EXCLUDED_FEATURES = ("age", "gender", "response_sms", "response_viber")
-
-# Criteo columns
-CRITEO_ROWS_FULL = 13_979_592
-CRITEO_ROWS_10PCT = CRITEO_ROWS_FULL // 10
-CRITEO_ROW_TOLERANCE = 0.01
-CRITEO_TREATMENT_COL = "treatment"
-CRITEO_TREATMENT_SHARE = 0.85
-CRITEO_TREATMENT_SHARE_TOLERANCE = 0.01
-CRITEO_FEATURES = tuple(f"f{i}" for i in range(12))
-CRITEO_OUTCOMES = ("visit", "conversion")

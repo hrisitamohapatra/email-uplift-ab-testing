@@ -72,7 +72,7 @@ A small Streamlit app plans a sample size from the baseline rate, smallest lift 
 - **Old, short-term data.** Hillstrom is one test from 2008 that measured two weeks, so long-term effects such as unsubscribes are not covered.
 - **Lenta is not perfectly randomized.** Its groups differ by more than chance on some features. Lift fell from 7.4 to 5.6 per 1,000 (2.6 to 8.6) after comparing similar customers, and this can only correct for what the features measure. `age`, `gender`, `response_sms` and `response_viber` were excluded from its models.
 - **Two datasets cannot show why results differ.** Lenta has more data, but also richer features and a different outcome.
-- **Criteo was not used.** It was the original second dataset, but its download links returned 404 on 2026-11-02. `load_criteo` remains in the code and has only been run on fake data.
+- **Criteo was not used.** It was the original second dataset, but its download links returned 404 on 2026-11-02.
 
 ## How to run
 

@@ -49,7 +49,7 @@ These were recorded before the analysis was run on the real data.
 
 **What changed:** Lenta is now the second dataset. Criteo was not analysed.
 
-**Why:** on 2026-11-02, both download links in `scikit-uplift` and the link on Criteo's own dataset page returned 404 to header requests. Lenta was chosen over X5 (needs features built from 45.8M purchase rows) and MegaFon (synthetic data). The `load_criteo` code remains in `src/load.py`, but it has only ever been run on fake data.
+**Why:** on 2026-11-02, both download links in `scikit-uplift` and the link on Criteo's own dataset page returned 404 to header requests. Lenta was chosen over X5 (needs features built from 45.8M purchase rows) and MegaFon (synthetic data). The unused Criteo loader, which had only ever been run on fake data, was later removed from the code. The Criteo entries in this document remain as a record of the original plan.
 
 These choices were recorded before any model was fitted on Lenta.
 
