@@ -1,0 +1,11 @@
+# Data and secrets
+data/
+.env
+
+# Local environment and caches
+.venv/
+.cache/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
